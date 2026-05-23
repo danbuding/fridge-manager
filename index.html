@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>冰箱库存管理系统</title>
+    <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1>🧊 冰箱库存管理系统</h1>
+    </header>
+
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="dashboard">📊 汇总看板</button>
+        <button class="tab-btn" data-tab="add-item">➕ 添加物品</button>
+        <button class="tab-btn" data-tab="inventory">📋 库存浏览</button>
+        <button class="tab-btn" data-tab="transfer">🔄 物品转移</button>
+        <button class="tab-btn" data-tab="fridges">📦 冰箱管理</button>
+    </nav>
+
+    <main class="app-main">
+        <!-- Tab 1: 汇总看板 -->
+        <section id="tab-dashboard" class="tab-content active">
+            <div class="summary-cards" id="dashboard-summary"></div>
+            <div class="dash-grid">
+                <div class="dash-card">
+                    <h3>📦 各冰箱物品分布</h3>
+                    <div id="dash-fridge-stats"></div>
+                </div>
+                <div class="dash-card">
+                    <h3>⚠️ 临期提醒（3天内）</h3>
+                    <div id="dash-expiring"></div>
+                </div>
+                <div class="dash-card">
+                    <h3>🆕 最近添加</h3>
+                    <div id="dash-recent"></div>
+                </div>
+                <div class="dash-card">
+                    <h3>⭐ 常用物品</h3>
+                    <div id="dash-popular"></div>
+                </div>
+                <div class="dash-card" style="grid-column:1 / -1;margin-top:.5rem;">
+                    <h3>⚠️ 未标注物品（已存放超过3天）</h3>
+                    <div id="dash-warning"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: 添加物品 -->
+        <section id="tab-add-item" class="tab-content">
+            <div class="add-item-panel">
+                <h2>添加物品</h2>
+                <form id="form-add-item">
+                    <div class="form-group">
+                        <label>选择冰箱 <span class="required">*</span></label>
+                        <select id="add-fridge" class="form-select" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>存储类型</label>
+                        <div class="storage-toggle">
+                            <button type="button" class="storage-option active" data-type="cold">❄️ 冷藏</button>
+                            <button type="button" class="storage-option" data-type="frozen">🧊 冷冻</button>
+                        </div>
+                        <span id="storage-hint" class="text-muted" style="margin-top:.35rem;">未填生产日期和保质期时，默认 添加日期+5天 过期</span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>名称 <span class="required">*</span></label>
+                            <input type="text" id="add-name" class="form-input" required placeholder="例如：西红柿">
+                        </div>
+                        <div class="form-group">
+                            <label>分类 <span class="required">*</span></label>
+                            <select id="add-category" class="form-select" required></select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>数量</label>
+                            <input type="number" id="add-quantity" class="form-input" value="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>单位</label>
+                            <select id="add-unit" class="form-select">
+                                <option value="个">个</option>
+                                <option value="瓶">瓶</option>
+                                <option value="袋">袋</option>
+                                <option value="盒">盒</option>
+                                <option value="斤">斤</option>
+                                <option value="公斤">公斤</option>
+                                <option value="把">把</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>生产日期</label>
+                            <input type="date" id="add-production-date" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>添加日期</label>
+                            <input type="date" id="add-added" class="form-input">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:2;">
+                            <label>保质期 <span style="font-weight:400;color:#888;">(未填则按存储类型推算)</span></label>
+                            <div style="display:flex;gap:.5rem;">
+                                <input type="number" id="add-shelf-life-value" class="form-input" min="1" placeholder="数值" style="flex:2;">
+                                <select id="add-shelf-life-unit" class="form-select" style="flex:1;">
+                                    <option value="day">天</option>
+                                    <option value="month">月</option>
+                                    <option value="year">年</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>备注</label>
+                        <input type="text" id="add-notes" class="form-input" placeholder="备注信息...">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">✅ 添加物品</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Tab 3: 库存浏览 -->
+        <section id="tab-inventory" class="tab-content">
+            <div class="section-header">
+                <h2>库存浏览</h2>
+                <div class="filter-bar">
+                    <select id="inv-fridge-select" class="form-select">
+                        <option value="">-- 全部冰箱 --</option>
+                    </select>
+                    <select id="inv-category-select" class="form-select">
+                        <option value="">-- 全部分类 --</option>
+                    </select>
+                    <input type="text" id="inv-search" class="form-input" placeholder="搜索物品...">
+                </div>
+            </div>
+            <div class="section-header" style="margin-top:0;border-top:none;padding-top:0;">
+                <span id="inv-summary" class="text-muted"></span>
+            </div>
+            <div id="item-list" class="card-grid"></div>
+            <div id="pagination" class="pagination"></div>
+        </section>
+
+        <!-- Tab 3: 物品转移 -->
+        <section id="tab-transfer" class="tab-content">
+            <div class="transfer-panel">
+                <div class="transfer-selects">
+                    <div class="form-group">
+                        <label>来源冰箱</label>
+                        <select id="t-from-fridge" class="form-select">
+                            <option value="">-- 选择来源冰箱 --</option>
+                        </select>
+                    </div>
+                    <div class="transfer-arrow">→</div>
+                    <div class="form-group">
+                        <label>目标冰箱</label>
+                        <select id="t-to-fridge" class="form-select">
+                            <option value="">-- 选择目标冰箱 --</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="transfer-items" class="card-grid" style="margin-top:1rem;"></div>
+                <button class="btn btn-primary" id="btn-transfer" style="display:none;">执行转移</button>
+            </div>
+            <div class="section-header" style="margin-top:2rem;">
+                <h2>转移记录</h2>
+            </div>
+            <div id="transfer-logs" class="log-list"></div>
+        </section>
+
+        <!-- Tab 4: 冰箱管理 -->
+        <section id="tab-fridges" class="tab-content">
+            <div class="section-header">
+                <h2>冰箱列表</h2>
+                <button class="btn btn-primary" id="btn-add-fridge">+ 添加冰箱</button>
+            </div>
+            <div id="fridge-list" class="card-grid"></div>
+        </section>
+    </main>
+
+    <!-- 冰箱表单弹窗 -->
+    <div id="modal-fridge" class="modal" hidden>
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-fridge-title">添加冰箱</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="form-fridge">
+                <input type="hidden" id="fridge-id">
+                <div class="form-group">
+                    <label>名称 <span class="required">*</span></label>
+                    <input type="text" id="fridge-name" class="form-input" required placeholder="例如：厨房冰箱">
+                </div>
+                <div class="form-group">
+                    <label>位置</label>
+                    <input type="text" id="fridge-location" class="form-input" placeholder="例如：厨房">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="fridge-desc" class="form-input" rows="2" placeholder="备注信息..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary modal-cancel">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 物品表单弹窗 -->
+    <div id="modal-item" class="modal" hidden>
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-item-title">添加物品</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="form-item">
+                <input type="hidden" id="item-id">
+                <div class="form-group">
+                    <label>名称 <span class="required">*</span></label>
+                    <input type="text" id="item-name" class="form-input" required placeholder="例如：西红柿">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>分类 <span class="required">*</span></label>
+                        <select id="item-category" class="form-select" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>冰箱 <span class="required">*</span></label>
+                        <select id="item-fridge" class="form-select" required></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" id="item-quantity" class="form-input" value="1" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>单位</label>
+                        <select id="item-unit" class="form-select">
+                            <option value="个">个</option>
+                            <option value="瓶">瓶</option>
+                            <option value="袋">袋</option>
+                            <option value="盒">盒</option>
+                            <option value="斤">斤</option>
+                            <option value="公斤">公斤</option>
+                            <option value="把">把</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>存储类型</label>
+                        <select id="item-storage-type" class="form-select">
+                            <option value="">-- 未指定 --</option>
+                            <option value="cold">❄️ 冷藏</option>
+                            <option value="frozen">🧊 冷冻</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>生产日期</label>
+                        <input type="date" id="item-production-date" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>添加日期</label>
+                        <input type="date" id="item-added" class="form-input">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:2;">
+                        <label>保质期 <span style="font-weight:400;color:#888;">(未填则无法计算过期)</span></label>
+                        <div style="display:flex;gap:.5rem;">
+                            <input type="number" id="item-shelf-life-value" class="form-input" min="1" placeholder="数值" style="flex:2;">
+                            <select id="item-shelf-life-unit" class="form-select" style="flex:1;">
+                                <option value="day">天</option>
+                                <option value="month">月</option>
+                                <option value="year">年</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="item-notes" class="form-input" placeholder="备注信息...">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary modal-cancel">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="assets/app.js"></script>
+</body>
+</html>
