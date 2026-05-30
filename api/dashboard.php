@@ -168,7 +168,7 @@ try {
     };
     array_walk($expiringItems, $fmtQty);
     array_walk($recentItems, $fmtQty);
-    array_walk($popularItems, function(&$row) { $fmtQty($row, 'total_quantity'); });
+    array_walk($popularItems, function(&$row) use ($fmtQty) { $fmtQty($row, 'total_quantity'); });
     array_walk($warningItems, $fmtQty);
 
     jsonResponse([
