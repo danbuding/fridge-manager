@@ -107,7 +107,7 @@ try {
         ORDER BY i.added_date DESC
         LIMIT 10")->fetchAll();
 
-    // 常用物品排名（按名称聚合，不限制冰箱）
+    // 物品汇总排名（按名称聚合，总量降序）
     $popularItems = $db->query("SELECT i.name, c.icon AS category_icon, SUM(i.quantity) AS total_quantity, COUNT(DISTINCT i.fridge_id) AS fridge_count
         FROM items i
         JOIN categories c ON i.category_id = c.id
@@ -158,6 +158,18 @@ try {
         WHERE production_date IS NULL AND shelf_life_value IS NULL
         AND added_date < DATE_SUB(CURDATE(), INTERVAL 3 DAY)
     ")->fetchColumn();
+
+    // 数量格式化：整数去 .00
+    $fmtQty = function(&$row, $key = 'quantity') {
+        if (isset($row[$key])) {
+            $q = (float)$row[$key];
+            $row[$key] = ($q == (int)$q) ? (int)$q : round($q, 2);
+        }
+    };
+    array_walk($expiringItems, $fmtQty);
+    array_walk($recentItems, $fmtQty);
+    array_walk($popularItems, function(&$row) { $fmtQty($row, 'total_quantity'); });
+    array_walk($warningItems, $fmtQty);
 
     jsonResponse([
         'summary' => [
