@@ -35,6 +35,22 @@ document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
     });
 });
 
+// === Confirm Modal ===
+let confirmCallback = null;
+function showConfirm(message, onConfirm) {
+    document.getElementById('confirm-msg').textContent = message;
+    confirmCallback = onConfirm;
+    openModal('modal-confirm');
+}
+document.getElementById('confirm-cancel').addEventListener('click', () => {
+    closeModal('modal-confirm');
+    confirmCallback = null;
+});
+document.getElementById('confirm-ok').addEventListener('click', () => {
+    closeModal('modal-confirm');
+    if (confirmCallback) { confirmCallback(); confirmCallback = null; }
+});
+
 // === Tab Switching ===
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -53,6 +69,7 @@ function loadTab(tab) {
         case 'inventory': loadInventoryTab(); break;
         case 'transfer': loadTransferTab(); break;
         case 'fridges': loadFridges(); break;
+        case 'data': loadDataTab(); break;
     }
 }
 
@@ -152,6 +169,8 @@ async function loadItems(page) {
     invCurrentPage = page || invCurrentPage;
     const fridge_id = document.getElementById('inv-fridge-select').value;
     const category_id = document.getElementById('inv-category-select').value;
+    const sort = document.getElementById('inv-sort-select').value;
+    const storage_type = document.getElementById('inv-storage-select').value;
     const search = document.getElementById('inv-search').value.trim();
 
     const list = document.getElementById('item-list');
@@ -159,10 +178,11 @@ async function loadItems(page) {
     list.innerHTML = '<div class="loading">加载中...</div>';
     pagination.innerHTML = '';
     try {
-        const params = new URLSearchParams({ page: invCurrentPage, per_page: 30 });
+        const params = new URLSearchParams({ page: invCurrentPage, per_page: 30, sort: sort });
         if (fridge_id) params.set('fridge_id', fridge_id);
         if (category_id) params.set('category_id', category_id);
         if (search) params.set('search', search);
+        if (storage_type) params.set('storage_type', storage_type);
 
         const data = await api('items.php?' + params.toString());
         const items = data.items;
@@ -185,6 +205,7 @@ async function loadItems(page) {
                 <div class="card-header">
                     <span class="card-title">${item.category_icon} ${esc(item.name)} ${badge}</span>
                     <div class="card-actions">
+                        <button onclick="consumeItem(${item.id}, event)" title="取用（-1）" class="btn-consume">−1</button>
                         <button onclick="editItem(${item.id})" title="编辑">✎</button>
                         <button class="danger" onclick="deleteItem(${item.id})" title="删除">✕</button>
                     </div>
@@ -221,6 +242,8 @@ async function loadItems(page) {
 
 document.getElementById('inv-fridge-select').addEventListener('change', () => loadItems(1));
 document.getElementById('inv-category-select').addEventListener('change', () => loadItems(1));
+document.getElementById('inv-sort-select').addEventListener('change', () => loadItems(1));
+document.getElementById('inv-storage-select').addEventListener('change', () => loadItems(1));
 document.getElementById('inv-search').addEventListener('input', debounce(() => loadItems(1), 300));
 
 // ========== Tab 2: 添加物品 ==========
@@ -256,7 +279,7 @@ document.getElementById('form-add-item').addEventListener('submit', async (e) =>
         name: document.getElementById('add-name').value.trim(),
         category_id: parseInt(document.getElementById('add-category').value),
         fridge_id: parseInt(document.getElementById('add-fridge').value),
-        quantity: parseInt(document.getElementById('add-quantity').value) || 1,
+        quantity: parseFloat(document.getElementById('add-quantity').value) || 1,
         unit: document.getElementById('add-unit').value,
         production_date: document.getElementById('add-production-date').value || null,
         shelf_life_value: shelfValue ? parseInt(shelfValue) : null,
@@ -291,7 +314,7 @@ document.getElementById('form-item').addEventListener('submit', async (e) => {
         name: document.getElementById('item-name').value.trim(),
         category_id: parseInt(document.getElementById('item-category').value),
         fridge_id: parseInt(document.getElementById('item-fridge').value),
-        quantity: parseInt(document.getElementById('item-quantity').value) || 1,
+        quantity: parseFloat(document.getElementById('item-quantity').value) || 1,
         unit: document.getElementById('item-unit').value,
         production_date: document.getElementById('item-production-date').value || null,
         shelf_life_value: shelfValue ? parseInt(shelfValue) : null,
@@ -349,29 +372,57 @@ async function deleteItem(id) {
     } catch (err) { toast(err.message, 'error'); }
 }
 
+async function consumeItem(id, event) {
+    if (event) event.stopPropagation();
+    showConfirm('确定取用 1 个吗？数量减到 0 会自动删除。', async () => {
+        try {
+            const data = await api('consume.php', {
+                method: 'POST',
+                body: JSON.stringify({ id })
+            });
+            toast(data.message);
+            loadItems();
+        } catch (err) { toast(err.message, 'error'); }
+    });
+}
+
 // ========== Tab 3: 物品转移 ==========
+let _transferItems = [];
+
 async function loadTransferTab() {
     const fridges = await api('fridge.php');
     const opts = fridges.map(f => `<option value="${f.id}">${esc(f.name)} (${f.item_count}件)</option>`).join('');
     document.getElementById('t-from-fridge').innerHTML = '<option value="">-- 选择来源冰箱 --</option>' + opts;
     document.getElementById('t-to-fridge').innerHTML = '<option value="">-- 选择目标冰箱 --</option>' + opts;
+    // 分类筛选
+    const cats = await api('categories.php');
+    document.getElementById('t-category').innerHTML = '<option value="">-- 全部分类 --</option>' + cats.map(c => `<option value="${c.id}">${c.icon} ${esc(c.name)}</option>`).join('');
     loadTransferLogs();
 }
 
-document.getElementById('t-from-fridge').addEventListener('change', async () => {
-    const fridge_id = document.getElementById('t-from-fridge').value;
+function renderTransferItems() {
     const container = document.getElementById('transfer-items');
     const btn = document.getElementById('btn-transfer');
-    if (!fridge_id) { container.innerHTML = ''; btn.style.display = 'none'; return; }
+    const catId = document.getElementById('t-category').value;
+    const search = document.getElementById('t-search').value.trim().toLowerCase();
 
-    container.innerHTML = '<div class="loading">加载中...</div>';
-    const items = await api('items.php?fridge_id=' + fridge_id);
-    if (!items.length) {
-        container.innerHTML = '<div class="empty-state">该冰箱暂无物品</div>';
+    if (!_transferItems.length) {
+        container.innerHTML = '';
         btn.style.display = 'none';
         return;
     }
-    container.innerHTML = items.map(item => {
+
+    let filtered = _transferItems;
+    if (catId) filtered = filtered.filter(i => i.category_id == catId);
+    if (search) filtered = filtered.filter(i => i.name.toLowerCase().includes(search));
+
+    if (!filtered.length) {
+        container.innerHTML = '<div class="empty-state">无匹配物品</div>';
+        btn.style.display = 'block';
+        return;
+    }
+
+    container.innerHTML = filtered.map(item => {
         let badge = '';
         if (item.is_expired) badge = ' <span class="badge badge-danger">已过期</span>';
         else if (item.is_expiring) badge = ' <span class="badge badge-warning">临期</span>';
@@ -383,12 +434,26 @@ document.getElementById('t-from-fridge').addEventListener('change', async () => 
             </div>
             ${item.expire_date ? '<div class="card-meta" style="margin-top:.25rem;">⏰ 过期: ' + item.expire_date + (item.days_left !== null ? ' (' + (item.days_left < 0 ? '已过' + Math.abs(item.days_left) + '天' : '剩' + item.days_left + '天') + ')' : '') + '</div>' : ''}
             <div class="transfer-qty" style="display:none;">
-                <label>转移数量: <input type="number" value="1" min="1" max="${item.quantity}" onclick="event.stopPropagation()"></label>
+                <label>转移数量: <input type="number" value="1" min="0.01" step="0.01" max="${item.quantity}" onclick="event.stopPropagation()"></label>
             </div>
         </div>
     `}).join('');
     btn.style.display = 'block';
+}
+
+document.getElementById('t-from-fridge').addEventListener('change', async () => {
+    const fridge_id = document.getElementById('t-from-fridge').value;
+    const container = document.getElementById('transfer-items');
+    const btn = document.getElementById('btn-transfer');
+    if (!fridge_id) { container.innerHTML = ''; btn.style.display = 'none'; _transferItems = []; return; }
+
+    container.innerHTML = '<div class="loading">加载中...</div>';
+    _transferItems = await api('items.php?fridge_id=' + fridge_id);
+    renderTransferItems();
 });
+
+document.getElementById('t-category').addEventListener('change', renderTransferItems);
+document.getElementById('t-search').addEventListener('input', debounce(renderTransferItems, 300));
 
 function toggleTransferItem(el) {
     el.classList.toggle('selected');
@@ -409,7 +474,7 @@ document.getElementById('btn-transfer').addEventListener('click', async () => {
         for (const el of selected) {
             const itemId = parseInt(el.dataset.id);
             const qtyInput = el.querySelector('input');
-            const quantity = qtyInput ? parseInt(qtyInput.value) : 1;
+            const quantity = qtyInput ? parseFloat(qtyInput.value) : 1;
             await api('transfer.php', {
                 method: 'POST',
                 body: JSON.stringify({ item_id: itemId, from_fridge_id: parseInt(from_id), to_fridge_id: parseInt(to_id), quantity })
@@ -549,6 +614,159 @@ function debounce(fn, delay) {
         clearTimeout(timer);
         timer = setTimeout(() => fn.apply(this, args), delay);
     };
+}
+
+// ========== Tab 5: 数据导入导出 ==========
+function loadDataTab() {
+    // 无需预加载数据，按钮点击时处理
+}
+
+// 导出 Markdown
+document.getElementById('btn-export-md').addEventListener('click', async () => {
+    try {
+        const res = await fetch('api/export_md.php');
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '导出失败'); }
+        const blob = await res.blob();
+        downloadBlob(blob, 'fridge-export-' + dateStamp() + '.md');
+        toast('Markdown 导出成功');
+    } catch (e) { toast(e.message, 'error'); }
+});
+
+// 导出 SQL
+document.getElementById('btn-export-sql').addEventListener('click', async () => {
+    try {
+        const res = await fetch('api/export_sql.php');
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '导出失败'); }
+        const blob = await res.blob();
+        downloadBlob(blob, 'fridge-export-' + dateStamp() + '.sql');
+        toast('SQL 导出成功');
+    } catch (e) { toast(e.message, 'error'); }
+});
+
+// 导出 CSV
+document.getElementById('btn-export-csv').addEventListener('click', async () => {
+    try {
+        const res = await fetch('api/export_csv.php');
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '导出失败'); }
+        const blob = await res.blob();
+        downloadBlob(blob, 'fridge-export-' + dateStamp() + '.csv');
+        toast('CSV 导出成功');
+    } catch (e) { toast(e.message, 'error'); }
+});
+
+// 导入 Markdown
+document.getElementById('btn-import-md').addEventListener('click', () => {
+    const content = document.getElementById('import-md-content').value.trim();
+    if (!content) { toast('请粘贴 Markdown 内容', 'error'); return; }
+    showConfirm('确定要导入 Markdown 数据吗？冰箱重名将跳过，物品全部新增。', async () => {
+    try {
+        const data = await api('import_md.php', {
+            method: 'POST',
+            body: JSON.stringify({ content })
+        });
+        const div = document.getElementById('import-md-result');
+        if (data.errors && data.errors.length) {
+            div.className = 'import-result error';
+            div.innerHTML = '⚠️ 部分导入完成<br>'
+                + '✅ 冰箱: ' + data.fridges_imported + ' 导入, ' + data.fridges_skipped + ' 跳过<br>'
+                + '✅ 物品: ' + data.items_imported + ' 条新增<br>'
+                + '❌ 错误:<br>' + data.errors.slice(0, 5).map(e => '· ' + esc(e)).join('<br>');
+        } else {
+            div.className = 'import-result success';
+            div.innerHTML = '✅ 导入完成：冰箱 ' + data.fridges_imported + ' 导入, ' + data.fridges_skipped + ' 跳过；'
+                + '物品 ' + data.items_imported + ' 条新增';
+        }
+        toast('导入完成');
+    } catch (e) { toast(e.message, 'error'); }
+    });
+});
+
+// 导入 SQL
+document.getElementById('btn-import-sql').addEventListener('click', () => {
+    const content = document.getElementById('import-sql-content').value.trim();
+    if (!content) { toast('请粘贴 SQL 内容', 'error'); return; }
+    showConfirm('确定要导入 SQL 数据吗？重名记录将跳过。', async () => {
+    try {
+        const data = await api('import_sql.php', {
+            method: 'POST',
+            body: JSON.stringify({ content })
+        });
+        const div = document.getElementById('import-sql-result');
+        if (data.errors && data.errors.length) {
+            div.className = 'import-result error';
+            div.innerHTML = '⚠️ 导入完成（有错误）<br>'
+                + '✅ 导入: ' + data.imported + ' 条<br>'
+                + '❌ 错误:<br>' + data.errors.slice(0, 5).map(e => '· ' + esc(e)).join('<br>');
+        } else {
+            div.className = 'import-result success';
+            div.innerHTML = '✅ 导入完成：共导入 ' + data.imported + ' 条记录';
+        }
+        toast('SQL 导入完成');
+    } catch (e) { toast(e.message, 'error'); }
+    });
+});
+
+// 下载 Markdown 空白模板
+document.getElementById('btn-template-md').addEventListener('click', async () => {
+    try {
+        const res = await fetch('api/export_md.php?template=1');
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '下载失败'); }
+        const blob = await res.blob();
+        downloadBlob(blob, 'fridge-template.md');
+        toast('空白模板已下载');
+    } catch (e) { toast(e.message, 'error'); }
+});
+
+// 下载 CSV 空白模板
+document.getElementById('btn-template-csv').addEventListener('click', async () => {
+    try {
+        const res = await fetch('api/export_csv.php?template=1');
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '下载失败'); }
+        const blob = await res.blob();
+        downloadBlob(blob, 'fridge-template.csv');
+        toast('空白模板已下载');
+    } catch (e) { toast(e.message, 'error'); }
+});
+
+// 导入 CSV
+document.getElementById('btn-import-csv').addEventListener('click', () => {
+    const content = document.getElementById('import-csv-content').value.trim();
+    if (!content) { toast('请粘贴 CSV 内容', 'error'); return; }
+    showConfirm('确定要导入 CSV 数据吗？冰箱重名将跳过，物品全部新增。', async () => {
+    try {
+        const data = await api('import_csv.php', {
+            method: 'POST',
+            body: JSON.stringify({ content })
+        });
+        const div = document.getElementById('import-csv-result');
+        if (data.errors && data.errors.length) {
+            div.className = 'import-result error';
+            div.innerHTML = '⚠️ 部分导入完成<br>'
+                + '✅ 冰箱: ' + data.fridges_imported + ' 导入, ' + data.fridges_skipped + ' 跳过<br>'
+                + '✅ 物品: ' + data.items_imported + ' 条新增<br>'
+                + '❌ 错误:<br>' + data.errors.slice(0, 5).map(e => '· ' + esc(e)).join('<br>');
+        } else {
+            div.className = 'import-result success';
+            div.innerHTML = '✅ 导入完成：冰箱 ' + data.fridges_imported + ' 导入, ' + data.fridges_skipped + ' 跳过；'
+                + '物品 ' + data.items_imported + ' 条新增';
+        }
+        toast('导入完成');
+    } catch (e) { toast(e.message, 'error'); }
+    });
+});
+
+// ========== 工具函数 ==========
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function dateStamp() {
+    return new Date().toISOString().slice(0, 10).replace(/-/g, '');
 }
 
 // ========== Init ==========

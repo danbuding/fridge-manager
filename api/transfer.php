@@ -26,7 +26,7 @@ switch ($method) {
             jsonResponse(['error' => '来源和目标冰箱不能相同'], 400);
         }
 
-        $quantity = (int)($data['quantity'] ?? 1);
+        $quantity = (float)($data['quantity'] ?? 1);
 
         // 获取物品当前信息
         $stmt = $db->prepare('SELECT * FROM items WHERE id = ?');

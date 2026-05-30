@@ -16,6 +16,7 @@
         <button class="tab-btn" data-tab="add-item">➕ 添加物品</button>
         <button class="tab-btn" data-tab="inventory">📋 库存浏览</button>
         <button class="tab-btn" data-tab="transfer">🔄 物品转移</button>
+        <button class="tab-btn" data-tab="data">📦 数据导入导出</button>
         <button class="tab-btn" data-tab="fridges">📦 冰箱管理</button>
     </nav>
 
@@ -77,7 +78,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>数量</label>
-                            <input type="number" id="add-quantity" class="form-input" value="1" min="1">
+                            <input type="number" id="add-quantity" class="form-input" value="1" min="0" step="0.01">
                         </div>
                         <div class="form-group">
                             <label>单位</label>
@@ -137,6 +138,20 @@
                     <select id="inv-category-select" class="form-select">
                         <option value="">-- 全部分类 --</option>
                     </select>
+                    <select id="inv-storage-select" class="form-select">
+                        <option value="">-- 冷冻/冷藏 --</option>
+                        <option value="cold">❄️ 冷藏</option>
+                        <option value="frozen">🧊 冷冻</option>
+                    </select>
+                    <select id="inv-sort-select" class="form-select">
+                        <option value="expire">⏰ 到期时间</option>
+                        <option value="added_desc">🆕 最近添加</option>
+                        <option value="added_asc">📅 最早添加</option>
+                        <option value="name">🔤 名称 A-Z</option>
+                        <option value="name_desc">🔤 名称 Z-A</option>
+                        <option value="quantity_desc">📦 数量 多→少</option>
+                        <option value="quantity_asc">📦 数量 少→多</option>
+                    </select>
                     <input type="text" id="inv-search" class="form-input" placeholder="搜索物品...">
                 </div>
             </div>
@@ -165,8 +180,14 @@
                         </select>
                     </div>
                 </div>
-                <div id="transfer-items" class="card-grid" style="margin-top:1rem;"></div>
-                <button class="btn btn-primary" id="btn-transfer" style="display:none;">执行转移</button>
+                <div class="filter-bar transfer-filter" style="margin-top:1rem;">
+                    <select id="t-category" class="form-select">
+                        <option value="">-- 全部分类 --</option>
+                    </select>
+                    <input type="text" id="t-search" class="form-input" placeholder="搜索物品名称...">
+                </div>
+                <button class="btn btn-primary" id="btn-transfer" style="display:none;margin-bottom:.5rem;">执行转移</button>
+                <div id="transfer-items" class="card-grid"></div>
             </div>
             <div class="section-header" style="margin-top:2rem;">
                 <h2>转移记录</h2>
@@ -181,6 +202,56 @@
                 <button class="btn btn-primary" id="btn-add-fridge">+ 添加冰箱</button>
             </div>
             <div id="fridge-list" class="card-grid"></div>
+        </section>
+
+        <!-- Tab 5: 数据导入导出 -->
+        <section id="tab-data" class="tab-content">
+            <div class="section-header">
+                <h2>📤 导出数据</h2>
+            </div>
+            <div class="export-actions">
+                <button class="btn btn-primary" id="btn-export-csv">📊 导出 CSV</button>
+                <button class="btn btn-primary" id="btn-export-md">📄 导出 Markdown</button>
+                <button class="btn btn-primary" id="btn-export-sql">🗃️ 导出 SQL</button>
+            </div>
+
+            <div class="section-header" style="margin-top:1.5rem;">
+                <h2>📥 导入数据</h2>
+            </div>
+
+            <div class="import-section">
+                <div class="import-card">
+                    <h3>从 CSV 导入 <span style="font-weight:400;color:#888;font-size:.85rem;">(兼容 Excel)</span></h3>
+                    <p class="text-muted" style="margin-bottom:.5rem;">粘贴从本系统导出的 CSV 内容，或用 Excel 编辑后粘贴回来。首行为表头，<code>#</code> 开头行为注释。</p>
+                    <button class="btn btn-secondary btn-sm" id="btn-template-csv" style="margin-bottom:.5rem;">📋 下载空白模板</button>
+                    <textarea id="import-csv-content" class="form-input import-textarea" placeholder="在此粘贴 CSV 内容..."></textarea>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" id="btn-import-csv">📥 导入 CSV</button>
+                    </div>
+                    <div id="import-csv-result" class="import-result"></div>
+                </div>
+
+                <div class="import-card" style="margin-top:1rem;">
+                    <h3>从 Markdown 导入</h3>
+                    <p class="text-muted" style="margin-bottom:.5rem;">粘贴从本系统导出的 Markdown 表格内容，导入冰箱和物品数据。</p>
+                    <button class="btn btn-secondary btn-sm" id="btn-template-md" style="margin-bottom:.5rem;">📋 下载空白模板</button>
+                    <textarea id="import-md-content" class="form-input import-textarea" placeholder="在此粘贴 Markdown 内容..."></textarea>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" id="btn-import-md">📥 导入 Markdown</button>
+                    </div>
+                    <div id="import-md-result" class="import-result"></div>
+                </div>
+
+                <div class="import-card" style="margin-top:1rem;">
+                    <h3>从 SQL 导入</h3>
+                    <p class="text-muted" style="margin-bottom:.5rem;">粘贴从本系统导出的 SQL 文件内容，仅导入 INSERT 数据，不改变表结构。</p>
+                    <textarea id="import-sql-content" class="form-input import-textarea" placeholder="在此粘贴 SQL 内容..."></textarea>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" id="btn-import-sql">📥 导入 SQL</button>
+                    </div>
+                    <div id="import-sql-result" class="import-result"></div>
+                </div>
+            </div>
         </section>
     </main>
 
@@ -241,7 +312,7 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>数量</label>
-                        <input type="number" id="item-quantity" class="form-input" value="1" min="1">
+                        <input type="number" id="item-quantity" class="form-input" value="1" min="0" step="0.01">
                     </div>
                     <div class="form-group">
                         <label>单位</label>
@@ -298,6 +369,18 @@
                     <button type="submit" class="btn btn-primary">保存</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- 确认弹窗 -->
+    <div id="modal-confirm" class="modal" hidden>
+        <div class="modal-overlay"></div>
+        <div class="modal-content" style="max-width:360px;text-align:center;">
+            <p id="confirm-msg" style="margin-bottom:1.25rem;font-size:.95rem;"></p>
+            <div class="form-actions" style="justify-content:center;">
+                <button class="btn btn-secondary" id="confirm-cancel">取消</button>
+                <button class="btn btn-primary" id="confirm-ok">确认</button>
+            </div>
         </div>
     </div>
 

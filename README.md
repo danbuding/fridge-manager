@@ -7,8 +7,9 @@
 | 模块 | 说明 |
 |------|------|
 | **汇总看板** | 系统首页，展示冰箱总数、物品总数、临期物品数（3天内）；各冰箱物品分布柱状图；临期提醒列表；最近添加物品；常用物品排名；未标注物品预警 |
-| **库存浏览** | 选择冰箱和分类浏览物品；支持关键字搜索；展示生产日期、保质期、推算过期时间及存放天数；临期/已过期状态标记；物品的增删改操作 |
-| **物品转移** | 将物品从一台冰箱转移到另一台冰箱；支持部分数量转移；自动记录转移日志 |
+| **库存浏览** | 选择冰箱和分类浏览物品；7 种排序方式；搜索筛选；快速取用（−1减量）；展示过期推算及临期/已过期状态；物品增删改操作 |
+| **物品转移** | 将物品从一台冰箱转移到另一台冰箱；支持部分数量转移；分类筛选和名称搜索；自动记录转移日志 |
+| **数据导入导出** | 支持 CSV/Markdown/SQL 三种格式导出和导入；支持下载空白模板；所有操作在界面内完成，无需外部工具 |
 | **冰箱管理** | 冰箱的增删改操作；每台冰箱显示物品数量统计 |
 
 ## 技术架构
@@ -30,7 +31,11 @@
 │     │   ├── fridge.php     冰箱 CRUD     │
 │     │   ├── items.php      物品 CRUD     │
 │     │   ├── transfer.php   转移操作 API  │
-│     │   └── categories.php 分类查询     │
+│     │   ├── categories.php 分类查询     │
+│     │   ├── export_md.php  Markdown 导出 │
+│     │   ├── export_sql.php  SQL 导出     │
+│     │   ├── import_md.php  Markdown 导入 │
+│     │   └── import_sql.php SQL 导入     │
 │     └── assets/            前端静态资源  │
 │         ├── app.js         核心逻辑      │
 │         └── style.css      样式表        │
@@ -95,6 +100,10 @@ define('DB_PASS', '你的数据库密码');
 
 将整个项目文件夹放到 Nginx 的 web 根目录，配置 Nginx 站点指向该目录。
 
+### 升级
+
+浏览器访问 `http://你的服务器IP/fridge-manager/upgrade.php`，自动检测并执行数据库结构升级。也可手动导入 `migrate_v3.sql`。
+
 ### 访问
 
 应用入口：`http://你的服务器IP/fridge-manager/`
@@ -126,7 +135,7 @@ define('DB_PASS', '你的数据库密码');
 | POST | `api/fridge.php` | 新增冰箱 |
 | PUT | `api/fridge.php` | 更新冰箱 |
 | DELETE | `api/fridge.php?id=` | 删除冰箱 |
-| GET | `api/items.php?fridge_id=&category_id=&search=&limit=&expiring=` | 物品列表 |
+| GET | `api/items.php?fridge_id=&category_id=&search=&limit=&expiring=&sort=&page=&per_page=` | 物品列表（支持分页和排序） |
 | POST | `api/items.php` | 新增物品 |
 | PUT | `api/items.php` | 更新物品 |
 | DELETE | `api/items.php?id=` | 删除物品 |
@@ -134,3 +143,11 @@ define('DB_PASS', '你的数据库密码');
 | POST | `api/transfer.php` | 执行转移 |
 | GET | `api/categories.php` | 分类列表 |
 | GET | `api/dashboard.php` | 汇总看板数据 |
+| GET | `api/export_md.php` | 导出 Markdown 格式数据（文件下载）。`?template=1` 导出空白模板 |
+| GET | `api/export_csv.php` | 导出 CSV 格式数据（文件下载，兼容 Excel） |
+| GET | `api/export_csv.php?template=1` | 导出空白 CSV 模板（仅表头） |
+| GET | `api/export_sql.php` | 导出完整 SQL 数据（文件下载） |
+| POST | `api/import_md.php` | 导入 Markdown 格式数据 |
+| POST | `api/import_csv.php` | 导入 CSV 格式数据 |
+| POST | `api/import_sql.php` | 导入 SQL 数据 |
+| POST | `api/consume.php` | 快速取用（减量/归零删除） |

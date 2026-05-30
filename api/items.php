@@ -13,6 +13,7 @@ switch ($method) {
         $limit = getParam('limit');
         $page = getParam('page');
         $perPage = getParam('per_page', 30);
+        $sort = getParam('sort', 'expire');
 
         $baseFrom = 'FROM items i
                 JOIN categories c ON i.category_id = c.id
@@ -41,9 +42,9 @@ switch ($method) {
             $whereParams[] = (int)$expiring;
         }
         if ($search) { $where .= ' AND i.name LIKE ?'; $whereParams[] = '%' . $search . '%'; }
+        if ($storage_type = getParam('storage_type')) { $where .= ' AND i.storage_type = ?'; $whereParams[] = $storage_type; }
 
-        $orderBy = " ORDER BY"
-            . " CASE WHEN i.shelf_life_value IS NOT NULL THEN"
+        $expireOrder = " CASE WHEN i.shelf_life_value IS NOT NULL THEN"
             . "     CASE WHEN i.production_date IS NOT NULL THEN"
             . "         CASE i.shelf_life_unit"
             . "             WHEN 'year' THEN DATE_ADD(i.production_date, INTERVAL i.shelf_life_value YEAR)"
@@ -57,8 +58,19 @@ switch ($method) {
             . "             ELSE DATE_ADD(i.added_date, INTERVAL CEIL(i.shelf_life_value / 2) DAY)"
             . "         END"
             . "     END"
-            . "     ELSE NULL"
-            . " END ASC, i.added_date DESC";
+            . "     ELSE DATE_ADD(i.added_date, INTERVAL CASE WHEN i.storage_type = 'frozen' THEN 90 ELSE 5 END DAY)"
+            . " END";
+
+        switch ($sort) {
+            case 'added_desc': $orderBy = " ORDER BY i.added_date DESC"; break;
+            case 'added_asc':  $orderBy = " ORDER BY i.added_date ASC"; break;
+            case 'name':       $orderBy = " ORDER BY i.name ASC"; break;
+            case 'name_desc':  $orderBy = " ORDER BY i.name DESC"; break;
+            case 'quantity_desc': $orderBy = " ORDER BY i.quantity DESC"; break;
+            case 'quantity_asc':  $orderBy = " ORDER BY i.quantity ASC"; break;
+            case 'expire':
+            default:           $orderBy = " ORDER BY " . $expireOrder . " ASC, i.added_date DESC"; break;
+        }
 
         if ($page !== null) {
             // Pagination mode: return {items, total, page, per_page}
@@ -91,6 +103,9 @@ switch ($method) {
 
         // 计算存放天数
         foreach ($items as &$item) {
+            // 数量格式化：整数去 .00，小数保留
+            $q = (float)$item['quantity'];
+            $item['quantity'] = ($q == (int)$q) ? (int)$q : round($q, 2);
             $now = new DateTime();
             $item['days_stored'] = (int)($now->diff(new DateTime($item['added_date'])))->days;
             $item['is_expiring'] = false;
